@@ -13,7 +13,7 @@ type Vector = GenericVector Float
 data GenericTriangle t = Triangle (GenericPoint t) (GenericPoint t) (GenericPoint t) deriving (Show)
 type Triangle = GenericTriangle Float
 
-data GenericRay t = Ray { rayOrigin :: Point, normal :: Vector }
+data GenericRay t = Ray { rayOrigin :: Point, normal :: Vector } deriving (Show)
 type Ray = GenericRay Float
 
 type Plane = Ray
@@ -59,4 +59,5 @@ someFunc = let unitX = Vector 1 0 0
                a = Point 0 0 0
            in
              (print $ crossProduct unitX unitY) >>
-             (print $ normalTraingleFace triangle)
+             (print $ normalTraingleFace triangle) >>
+             (print $ triangleToPlane triangle)
