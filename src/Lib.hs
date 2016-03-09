@@ -1,28 +1,28 @@
-module Lib
-    ( tests
-    ) where
+{-# LANGUAGE DeriveFunctor #-}
+module Lib where
 
 import Data.Function
 import Data.Maybe
-import Control.Monad
 
-data GenericPoint t = Point { pX :: t, pY :: t, pZ :: t } deriving (Show)
+data GenericPoint t = Point { pX :: t, pY :: t, pZ :: t } deriving (Show, Functor)
 type Point = GenericPoint Float
 
 data GenericVector t = Vector { vX :: t, vY :: t, vZ :: t } deriving (Show)
 type Vector = GenericVector Float
 
-data GenericTriangle t = Triangle (GenericPoint t) (GenericPoint t) (GenericPoint t) deriving (Show)
-type Triangle = GenericTriangle Float
+data GenericTriangle t = Triangle t t t deriving (Show, Functor)
+type Triangle = GenericTriangle Point
 
 data GenericRay t = Ray { rayOrigin :: Point, normal :: Vector } deriving (Show)
 type Ray = GenericRay Float
 
 type Plane = Ray
 
-type World = [Triangle]
+newtype World = World [Triangle]
 
 data Segment  = Segment Point Point deriving (Show)
+
+newtype Radians = Radians Float
 
 data ProjectionScreen = ProjectionScreen { xResolution :: Int, yResolution :: Int, screenDirection :: Ray, toLeftEdge :: Vector, toTopEdge :: Vector }
 
@@ -117,9 +117,9 @@ rayTriangleIntersection r t =
 
 
 scales :: Int -> [Float]
-scales resolution = [index / (r / 2.0) | index <- stuff]
-  where stuff :: [Float]
-        stuff = fmap (* (-1)) [((-0.5) * r) .. ((0.5) * r)]
+scales resolution = [index / (r / 2.0) | index <- coefficients]
+  where coefficients :: [Float]
+        coefficients = fmap (* (-1)) [((-0.5) * r) .. ((0.5) * r)]
         r :: Float
         r = fromIntegral resolution
 
@@ -137,40 +137,54 @@ rays screen = [rayRow yScale screen | yScale <- scales (yResolution screen)]
         screenCenter screen = pointToVec $ translateP (rayOrigin (screenDirection screen)) (normal (screenDirection screen))
 
 render :: World -> Ray -> Char
-render world r = if (any (hitsTriangle r) world)
+render (World triangles) r = if (any (hitsTriangle r) triangles)
                     then '*'
                     else ' '
                  where hitsTriangle r t = isJust (rayTriangleIntersection r t)
 
+square x = x * x
+norm v = sqrt ((square (vX v)) + (square (vY v)) + (square (vZ v)))
+normalize v = scaleV v (1/(norm v))
+
+rotateAround :: Point -> Ray -> Radians -> Point
+rotateAround p r rads@(Radians theta) = Point outX outY outZ
+  where Point x y z  = p
+        Ray rayOrigin rayDirection = r
+        normalRayDirection = normalize rayDirection
+        Vector u v w = normalRayDirection
+        Point a b c = rayOrigin
+        outX = (a * (v*v + w*w) - u * (b * v + c * w - u * x - v * y - w * z )) * (1 - cos theta) + (x * cos theta) + (b * w - c * v - w * y + v * z) * (sin theta)
+        outY = (b * (u*u + w*w) - v * (a * u + c * w - u * x - v * y - w * z )) * (1 - cos theta) + (y * cos theta) + (c * u - a * w + w * x - u * z ) * (sin theta)
+        outZ = (c * (u*u + v*v) - w * (a * u + b * v - u * x - v * y - w * z )) * (1 - cos theta) + (z * cos theta) + (a * v - b * u - v * x + u * y) * (sin theta)
+
+renderWorld :: ProjectionScreen -> World -> [String]
+renderWorld screen w = map (map (render w)) (rays screen)
+
+origin = Point 0 0 0
+unitX = Vector 1 0 0
+unitY = Vector 0 1 0
+unitZ = Vector 0 0 1
 
 tests :: IO ()
-tests = let unitX = Vector 1 0 0
-            unitY = Vector 0 1 0
-            unitZ = Vector 0 0 1
-            origin = Point 0 0 0
-            triangle = Triangle (Point 0 0 0) (Point 10 0 0) (Point 10 0 10)
-            farTriangle = Triangle (Point (-5) 10 0) (Point 0 10 5) (Point 5 10 0)
+tests = let triangle = Triangle (Point 0 0 (0.5)) (Point 10 0 (0.5)) (Point 10 0 10.5)
             plane :: Plane
             plane = Ray {rayOrigin = (Point 0 0 10), normal = (Vector 0 0 (-1)) }
             upray = Ray {rayOrigin = (Point 0 0 0), normal = (Vector 0 0 1) }
             upright = Ray {rayOrigin = (Point 0 0 0), normal = (Vector 5 0 1) }
             screen = ProjectionScreen {
-              xResolution = 20,
-              yResolution = 20,
+              xResolution = 3,
+              yResolution = 3,
               screenDirection = Ray { rayOrigin=origin, normal=unitY},
               toLeftEdge = scaleV unitX (-1),
               toTopEdge = unitZ
             }
-            world = [farTriangle]
-            rendered = map (map (render world)) (rays screen)
         in
-          --(print $ crossProduct unitX unitY) >>
-          --(print $ normalTraingleFace triangle) >>
-          --(print $ triangleToPlane triangle) >>
-          --(print $ rayIntersectPlane upray plane) >>
-          --(print $ rayIntersectPlane upright plane) >>
-          --(print $ pointInTriangle (Point 1 1 0) (Triangle (Point 0 0 0) (Point 10 0 0) (Point 10 90 0))) >>
-          --(print $ pointInTriangle (Point 1 (-1) 0) (Triangle (Point 0 0 0) (Point 10 0 0) (Point 10 90 0))) >>
-          --(print $ scales $ yResolution screen)>>
-          (forM_ rendered putStrLn)
-
+          (print $ crossProduct unitX unitY) >>
+          (print $ normalTraingleFace triangle) >>
+          (print $ rotateAround origin (Ray (vecToPoint unitY) unitZ) (Radians 3.14159)) >>
+          (print $ triangleToPlane triangle) >>
+          (print $ rayIntersectPlane upray plane) >>
+          (print $ rayIntersectPlane upright plane) >>
+          (print $ pointInTriangle (Point 1 1 0) (Triangle (Point 0 0 0) (Point 10 0 0) (Point 10 90 0))) >>
+          (print $ pointInTriangle (Point 1 (-1) 0) (Triangle (Point 0 0 0) (Point 10 0 0) (Point 10 90 0))) >>
+          (print $ scales $ yResolution screen)
