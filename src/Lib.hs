@@ -147,7 +147,7 @@ rotateAround p r (Radians theta) = makePoint outX outY outZ
 scales :: Int -> [Float]
 scales resolution = [index / (r / 2.0) | index <- coefficients]
   where coefficients :: [Float]
-        coefficients = fmap (* (-1)) [((-0.5) * r) .. ((0.5) * r)]
+        coefficients = fmap (* (-1)) [((-0.5) * r) .. (0.5 * r)]
         r :: Float
         r = fromIntegral resolution
 
