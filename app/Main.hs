@@ -7,8 +7,8 @@ import System.Console.ANSI
 
 main :: IO ()
 main = let screen = ProjectionScreen {
-             xResolution = 50,
-             yResolution = 50,
+             xResolution = 40,
+             yResolution = 40,
              screenDirection = Ray { rayOrigin=origin, rayDirection=unitY},
              toLeftEdge = scaleV unitX (-1),
              toTopEdge = unitZ
@@ -17,7 +17,7 @@ main = let screen = ProjectionScreen {
            farTriangle = Triangle (makePoint (-20) 30 0.5) (makePoint (-10) 30 10) (makePoint 0 30 0.5)
            worlds = map (renderWorld screen) $ iterate updateWorld seedWorld
         in
-          forM_ worlds (\w -> clearScreen >> threadDelay 100000 >> (forM_ w putStrLn))
+          forM_ worlds (\w -> clearScreen >> (forM_ w putStrLn) >> threadDelay 200000)
 
 
 
