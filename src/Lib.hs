@@ -4,19 +4,31 @@ module Lib where
 import Data.Function
 import Data.Maybe
 
-data GenericPoint t = Point { pX :: t, pY :: t, pZ :: t } deriving (Show, Functor)
-type Point = GenericPoint Float
-
-data GenericVector t = Vector { vX :: t, vY :: t, vZ :: t } deriving (Show)
+data GenericVector t = Vector { vX :: t, vY :: t, vZ :: t } deriving (Show, Functor)
 type Vector = GenericVector Float
+
+newtype Point = Point Vector deriving (Show)
+
+pX :: Point -> Float
+pX (Point v) = vX v
+pY :: Point -> Float
+pY (Point v) = vY v
+pZ :: Point -> Float
+pZ (Point v) = vZ v
 
 data GenericTriangle t = Triangle t t t deriving (Show, Functor)
 type Triangle = GenericTriangle Point
 
-data GenericRay t = Ray { rayOrigin :: Point, normal :: Vector } deriving (Show)
+data GenericRay t = Ray { rayOrigin :: Point, rayDirection :: Vector } deriving (Show)
 type Ray = GenericRay Float
 
-type Plane = Ray
+newtype Plane = Plane Ray deriving (Show)
+
+pNormal :: Plane -> Vector
+pNormal (Plane (Ray{rayOrigin = _, rayDirection = d})) = d
+
+pPointOn :: Plane -> Point
+pPointOn (Plane (Ray{rayOrigin = p, rayDirection = _})) = p
 
 newtype World = World [Triangle]
 
@@ -26,32 +38,34 @@ newtype Radians = Radians Float
 
 data ProjectionScreen = ProjectionScreen { xResolution :: Int, yResolution :: Int, screenDirection :: Ray, toLeftEdge :: Vector, toTopEdge :: Vector }
 
+makePoint :: Float -> Float -> Float -> Point
+makePoint x y z = Point $ Vector x y z
+
 normalTraingleFace :: Triangle -> Vector
-normalTraingleFace t@(Triangle a b c) =
+normalTraingleFace (Triangle a b c) =
   crossProduct (pointDifference b a) (pointDifference c a)
 
-pointDifference :: Point -> Point -> Vector
-pointDifference p1@(Point{pX = p1X, pY = p1Y, pZ = p1Z})
-                p2@(Point{pX = p2X, pY = p2Y, pZ = p2Z})  =
+vectorDifference :: Vector -> Vector -> Vector
+vectorDifference (Vector{vX = v1X, vY = v1Y, vZ = v1Z})
+                 (Vector{vX = v2X, vY = v2Y, vZ = v2Z})  =
   Vector {
-    vX = (p1X - p2X),
-    vY = (p1Y - p2Y),
-    vZ = (p1Z - p2Z)
+    vX = (v1X - v2X),
+    vY = (v1Y - v2Y),
+    vZ = (v1Z - v2Z)
   }
 
+pointDifference :: Point -> Point -> Vector
+pointDifference = vectorDifference `on` pointToVec
+
 vecToPoint :: Vector -> Point
-vecToPoint v =
-  Point (vX v) (vY v) (vZ v)
+vecToPoint v = makePoint (vX v) (vY v) (vZ v)
 
 pointToVec :: Point -> Vector
-pointToVec p =
-  Vector (pX p) (pY p) (pZ p)
-
-vectorDifference v1 v2 = pointDifference `on` vecToPoint
+pointToVec p = Vector (pX p) (pY p) (pZ p)
 
 crossProduct :: Vector -> Vector -> Vector
-crossProduct v1@(Vector{vX = v1X, vY = v1Y, vZ = v1Z})
-             v2@(Vector{vX = v2X, vY = v2Y, vZ = v2Z})  =
+crossProduct (Vector{vX = v1X, vY = v1Y, vZ = v1Z})
+             (Vector{vX = v2X, vY = v2Y, vZ = v2Z})  =
   Vector {
     vX = (v1Y * v2Z - v1Z * v2Y),
     vY = (v1Z * v2X - v1X * v2Z),
@@ -59,28 +73,18 @@ crossProduct v1@(Vector{vX = v1X, vY = v1Y, vZ = v1Z})
   }
 
 dotProduct :: Vector -> Vector -> Float
-dotProduct v1@(Vector{vX = v1X, vY = v1Y, vZ = v1Z})
-           v2@(Vector{vX = v2X, vY = v2Y, vZ = v2Z})  =
+dotProduct (Vector{vX = v1X, vY = v1Y, vZ = v1Z})
+           (Vector{vX = v2X, vY = v2Y, vZ = v2Z})  =
     (v1X * v2X) + (v1Y * v2Y) + (v1Z * v2Z)
 
 triangleToPlane :: Triangle -> Plane
-triangleToPlane triangle@(Triangle a b c) = Ray a (normalTraingleFace triangle)
+triangleToPlane triangle@(Triangle a _ _) = Plane $ Ray a (normalTraingleFace triangle)
 
 scaleV :: Vector -> Float -> Vector
-scaleV v f =
-  Vector {
-    vX = (vX v) * f,
-    vY = (vY v) * f,
-    vZ = (vZ v) * f
-  }
+scaleV v f = fmap ((*) f) v
 
 translateP :: Point -> Vector -> Point
-translateP p v =
-  Point {
-    pX = (vX v) + (pX p),
-    pY = (vY v) + (pY p),
-    pZ = (vZ v) + (pZ p)
-  }
+translateP p v = vecToPoint $ translateV (pointToVec p) v
 
 translateV :: Vector -> Vector -> Vector
 translateV v1 v2 =
@@ -94,19 +98,24 @@ rayIntersectPlane :: Ray -> Plane -> Maybe Point
 rayIntersectPlane ray plane =
   if (isInfinite t)
      then Nothing
-     else Just (translateP (rayOrigin ray) (scaleV (normal ray) t))
-  where t = ((dotProduct (pointToVec (rayOrigin plane)) (normal plane)) - (dotProduct (pointToVec (rayOrigin ray)) (normal plane)))/ (dotProduct (normal ray) (normal plane))
+     else Just (translateP (rayOrigin ray) (scaleV (rayDirection ray) t))
+  where t = top / bottom
+        top = (dotProduct (pointToVec (pPointOn plane)) (pNormal plane)) - (dotProduct (pointToVec (rayOrigin ray)) (pNormal plane))
+        bottom = dotProduct (rayDirection ray) (pNormal plane)
 
-sameSideOfSegment a b s@(Segment from to) = sameishDirection crossOne crossTwo
+sameSideOfSegment :: Point -> Point -> Segment -> Bool
+sameSideOfSegment a b (Segment from to) = sameishDirection crossOne crossTwo
   where crossOne = crossProduct (pointDifference a from) (pointDifference to from)
         crossTwo = crossProduct (pointDifference b from) (pointDifference to from)
         sameishDirection v1 v2 = (dotProduct v1 v2) > 0
 
 -- assumes coplanar!
+pointInTriangle :: Point -> Triangle -> Bool
 pointInTriangle p t = all (insideOfSide p) (sides t)
-  where sides t@(Triangle a b c) = [(Segment a b, c), (Segment a c, b), (Segment b c, a)]
-        insideOfSide p (segment, opposite) = sameSideOfSegment p opposite segment
+  where sides (Triangle a b c) = [(Segment a b, c), (Segment a c, b), (Segment b c, a)]
+        insideOfSide candidatePoint (segment, opposite) = sameSideOfSegment candidatePoint opposite segment
 
+rayTriangleIntersection :: Ray -> Triangle -> Maybe Point
 rayTriangleIntersection r t =
   case planeHit of
     Nothing -> Nothing
@@ -115,7 +124,26 @@ rayTriangleIntersection r t =
                  else Nothing
   where planeHit = rayIntersectPlane r (triangleToPlane t)
 
+square :: (Num a) => a -> a
+square x = x * x
 
+norm :: Vector -> Float
+norm v = sqrt ((square (vX v)) + (square (vY v)) + (square (vZ v)))
+
+normalize :: Vector -> Vector
+normalize v = scaleV v (1/ (norm v))
+
+rotateAround :: Point -> Ray -> Radians -> Point
+rotateAround p r (Radians theta) = makePoint outX outY outZ
+  where Point (Vector x y z)  = p
+        normalRayDirection = normalize (rayDirection r)
+        Vector u v w = normalRayDirection
+        Point (Vector a b c) = rayOrigin r
+        outX = (a * (v*v + w*w) - u * (b * v + c * w - u * x - v * y - w * z )) * (1 - cos theta) + (x * cos theta) + (b * w - c * v - w * y + v * z) * (sin theta)
+        outY = (b * (u*u + w*w) - v * (a * u + c * w - u * x - v * y - w * z )) * (1 - cos theta) + (y * cos theta) + (c * u - a * w + w * x - u * z ) * (sin theta)
+        outZ = (c * (u*u + v*v) - w * (a * u + b * v - u * x - v * y - w * z )) * (1 - cos theta) + (z * cos theta) + (a * v - b * u - v * x + u * y) * (sin theta)
+
+-- screen stuff
 scales :: Int -> [Float]
 scales resolution = [index / (r / 2.0) | index <- coefficients]
   where coefficients :: [Float]
@@ -123,58 +151,47 @@ scales resolution = [index / (r / 2.0) | index <- coefficients]
         r :: Float
         r = fromIntegral resolution
 
-rays screen = [rayRow yScale screen | yScale <- scales (yResolution screen)]
-  where rayRow yScale screen = [mkRay xScale yScale screen | xScale <- scales (xResolution screen)]
-        mkRay xScale yScale screen = Ray {
-          rayOrigin = (rayOrigin (screenDirection screen)),
-          normal = mkVector xScale yScale screen
+rays :: ProjectionScreen -> [[Ray]]
+rays screen = [rayRow yScale | yScale <- scales (yResolution screen)]
+  where rayRow yScale = [mkRay xScale yScale | xScale <- scales (xResolution screen)]
+        mkRay xScale yScale = Ray {
+          rayOrigin = rayOrigin (screenDirection screen),
+          rayDirection = mkVector xScale yScale
         }
-        mkVector xScale yScale screen = translateV
-                                          (screenCenter screen)
-                                          offCenter
+        mkVector xScale yScale = translateV screenCenter offCenter
           where offCenter = translateV (scaleV (toLeftEdge screen) xScale)
                                        (scaleV (toTopEdge screen) yScale)
-        screenCenter screen = pointToVec $ translateP (rayOrigin (screenDirection screen)) (normal (screenDirection screen))
+        screenCenter = pointToVec $ translateP (rayOrigin (screenDirection screen)) (rayDirection (screenDirection screen))
 
 render :: World -> Ray -> Char
-render (World triangles) r = if (any (hitsTriangle r) triangles)
+render (World triangles) r = if any (hitsTriangle r) triangles
                     then '*'
                     else ' '
-                 where hitsTriangle r t = isJust (rayTriangleIntersection r t)
-
-square x = x * x
-norm v = sqrt ((square (vX v)) + (square (vY v)) + (square (vZ v)))
-normalize v = scaleV v (1/(norm v))
-
-rotateAround :: Point -> Ray -> Radians -> Point
-rotateAround p r rads@(Radians theta) = Point outX outY outZ
-  where Point x y z  = p
-        Ray rayOrigin rayDirection = r
-        normalRayDirection = normalize rayDirection
-        Vector u v w = normalRayDirection
-        Point a b c = rayOrigin
-        outX = (a * (v*v + w*w) - u * (b * v + c * w - u * x - v * y - w * z )) * (1 - cos theta) + (x * cos theta) + (b * w - c * v - w * y + v * z) * (sin theta)
-        outY = (b * (u*u + w*w) - v * (a * u + c * w - u * x - v * y - w * z )) * (1 - cos theta) + (y * cos theta) + (c * u - a * w + w * x - u * z ) * (sin theta)
-        outZ = (c * (u*u + v*v) - w * (a * u + b * v - u * x - v * y - w * z )) * (1 - cos theta) + (z * cos theta) + (a * v - b * u - v * x + u * y) * (sin theta)
+                 where hitsTriangle ray t = isJust (rayTriangleIntersection ray t)
 
 renderWorld :: ProjectionScreen -> World -> [String]
 renderWorld screen w = map (map (render w)) (rays screen)
 
-origin = Point 0 0 0
+origin :: Point
+origin = makePoint 0 0 0
+
+unitX :: Vector
 unitX = Vector 1 0 0
+unitY :: Vector
 unitY = Vector 0 1 0
+unitZ :: Vector
 unitZ = Vector 0 0 1
 
 tests :: IO ()
-tests = let triangle = Triangle (Point 0 0 (0.5)) (Point 10 0 (0.5)) (Point 10 0 10.5)
+tests = let triangle = Triangle (makePoint 0 0 0.5) (makePoint 10 0 0.5) (makePoint 10 0 10.5)
             plane :: Plane
-            plane = Ray {rayOrigin = (Point 0 0 10), normal = (Vector 0 0 (-1)) }
-            upray = Ray {rayOrigin = (Point 0 0 0), normal = (Vector 0 0 1) }
-            upright = Ray {rayOrigin = (Point 0 0 0), normal = (Vector 5 0 1) }
+            plane = Plane Ray {rayOrigin = makePoint 0 0 10, rayDirection = Vector 0 0 (-1)}
+            upray = Ray {rayOrigin = makePoint 0 0 0, rayDirection = Vector 0 0 1 }
+            upright = Ray {rayOrigin = makePoint 0 0 0, rayDirection = Vector 5 0 1 }
             screen = ProjectionScreen {
               xResolution = 3,
               yResolution = 3,
-              screenDirection = Ray { rayOrigin=origin, normal=unitY},
+              screenDirection = Ray { rayOrigin=origin, rayDirection=unitY},
               toLeftEdge = scaleV unitX (-1),
               toTopEdge = unitZ
             }
@@ -185,6 +202,6 @@ tests = let triangle = Triangle (Point 0 0 (0.5)) (Point 10 0 (0.5)) (Point 10 0
           (print $ triangleToPlane triangle) >>
           (print $ rayIntersectPlane upray plane) >>
           (print $ rayIntersectPlane upright plane) >>
-          (print $ pointInTriangle (Point 1 1 0) (Triangle (Point 0 0 0) (Point 10 0 0) (Point 10 90 0))) >>
-          (print $ pointInTriangle (Point 1 (-1) 0) (Triangle (Point 0 0 0) (Point 10 0 0) (Point 10 90 0))) >>
+          (print $ pointInTriangle (makePoint 1 1 0) (Triangle (makePoint 0 0 0) (makePoint 10 0 0) (makePoint 10 90 0))) >>
+          (print $ pointInTriangle (makePoint 1 (-1) 0) (Triangle (makePoint 0 0 0) (makePoint 10 0 0) (makePoint 10 90 0))) >>
           (print $ scales $ yResolution screen)

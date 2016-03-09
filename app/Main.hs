@@ -9,12 +9,12 @@ main :: IO ()
 main = let screen = ProjectionScreen {
              xResolution = 50,
              yResolution = 50,
-             screenDirection = Ray { rayOrigin=origin, normal=unitY},
+             screenDirection = Ray { rayOrigin=origin, rayDirection=unitY},
              toLeftEdge = scaleV unitX (-1),
              toTopEdge = unitZ
            }
            seedWorld = World [farTriangle]
-           farTriangle = Triangle (Point (-20) 30 0.5) (Point (-10) 30 10) (Point 0 30 0.5)
+           farTriangle = Triangle (makePoint (-20) 30 0.5) (makePoint (-10) 30 10) (makePoint 0 30 0.5)
            worlds = map (renderWorld screen) $ iterate updateWorld seedWorld
         in
           forM_ worlds (\w -> clearScreen >> threadDelay 100000 >> (forM_ w putStrLn))
