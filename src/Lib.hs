@@ -158,9 +158,10 @@ rays screen = [rayRow yScale | yScale <- scales (yResolution screen)]
           rayOrigin = rayOrigin (screenDirection screen),
           rayDirection = mkVector xScale yScale
         }
-        mkVector xScale yScale = translateV screenCenter offCenter
-          where offCenter = translateV (scaleV (toLeftEdge screen) xScale)
-                                       (scaleV (toTopEdge screen) yScale)
+        mkVector xScale yScale = foldr
+          translateV
+          screenCenter
+          [(scaleV (toLeftEdge screen) xScale), (scaleV (toTopEdge screen) yScale)]
         screenCenter = pointToVec $ translateP (rayOrigin (screenDirection screen)) (rayDirection (screenDirection screen))
 
 render :: World -> Ray -> Char
