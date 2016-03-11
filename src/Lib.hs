@@ -5,22 +5,22 @@ import Data.Function
 import Data.Maybe
 
 data GenericVector t = Vector { vX :: t, vY :: t, vZ :: t } deriving (Show, Functor)
-type Vector = GenericVector Float
+type Vector = GenericVector Double
 
 newtype Point = Point Vector deriving (Show)
 
-pX :: Point -> Float
+pX :: Point -> Double
 pX (Point v) = vX v
-pY :: Point -> Float
+pY :: Point -> Double
 pY (Point v) = vY v
-pZ :: Point -> Float
+pZ :: Point -> Double
 pZ (Point v) = vZ v
 
 data GenericTriangle t = Triangle t t t deriving (Show, Functor)
 type Triangle = GenericTriangle Point
 
 data GenericRay t = Ray { rayOrigin :: Point, rayDirection :: Vector } deriving (Show)
-type Ray = GenericRay Float
+type Ray = GenericRay Double
 
 newtype Plane = Plane Ray deriving (Show)
 
@@ -34,11 +34,11 @@ newtype World = World [Triangle]
 
 data Segment  = Segment Point Point deriving (Show)
 
-newtype Radians = Radians Float
+newtype Radians = Radians Double
 
 data ProjectionScreen = ProjectionScreen { xResolution :: Int, yResolution :: Int, screenDirection :: Ray, toLeftEdge :: Vector, toTopEdge :: Vector }
 
-makePoint :: Float -> Float -> Float -> Point
+makePoint :: Double -> Double -> Double -> Point
 makePoint x y z = Point $ Vector x y z
 
 normalTraingleFace :: Triangle -> Vector
@@ -72,7 +72,7 @@ crossProduct (Vector{vX = v1X, vY = v1Y, vZ = v1Z})
     vZ = (v1X * v2Y - v1Y * v2X)
   }
 
-dotProduct :: Vector -> Vector -> Float
+dotProduct :: Vector -> Vector -> Double
 dotProduct (Vector{vX = v1X, vY = v1Y, vZ = v1Z})
            (Vector{vX = v2X, vY = v2Y, vZ = v2Z})  =
     (v1X * v2X) + (v1Y * v2Y) + (v1Z * v2Z)
@@ -80,7 +80,7 @@ dotProduct (Vector{vX = v1X, vY = v1Y, vZ = v1Z})
 triangleToPlane :: Triangle -> Plane
 triangleToPlane triangle@(Triangle a _ _) = Plane $ Ray a (normalTraingleFace triangle)
 
-scaleV :: Vector -> Float -> Vector
+scaleV :: Vector -> Double -> Vector
 scaleV v f = fmap ((*) f) v
 
 translateP :: Point -> Vector -> Point
@@ -127,7 +127,7 @@ rayTriangleIntersection r t =
 square :: (Num a) => a -> a
 square x = x * x
 
-norm :: Vector -> Float
+norm :: Vector -> Double
 norm v = sqrt ((square (vX v)) + (square (vY v)) + (square (vZ v)))
 
 normalize :: Vector -> Vector
@@ -144,11 +144,11 @@ rotateAround p r (Radians theta) = makePoint outX outY outZ
         outZ = (c * (u*u + v*v) - w * (a * u + b * v - u * x - v * y - w * z )) * (1 - cos theta) + (z * cos theta) + (a * v - b * u - v * x + u * y) * (sin theta)
 
 -- screen stuff
-scales :: Int -> [Float]
+scales :: Int -> [Double]
 scales resolution = [index / (r / 2.0) | index <- coefficients]
-  where coefficients :: [Float]
+  where coefficients :: [Double]
         coefficients = fmap (* (-1)) [((-0.5) * r) .. (0.5 * r)]
-        r :: Float
+        r :: Double
         r = fromIntegral resolution
 
 rays :: ProjectionScreen -> [[Ray]]
