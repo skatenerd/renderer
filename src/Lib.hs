@@ -2,12 +2,15 @@
 module Lib where
 
 import Data.Function
+import qualified Data.Set as S
 import Data.Maybe
+import Data.Octree
+import Data.List
 
-data GenericVector t = Vector { vX :: t, vY :: t, vZ :: t } deriving (Show, Functor)
+data GenericVector t = Vector { vX :: t, vY :: t, vZ :: t } deriving (Show, Functor, Eq, Ord)
 type Vector = GenericVector Double
 
-newtype Point = Point Vector deriving (Show)
+newtype Point = Point Vector deriving (Show, Eq, Ord)
 
 pX :: Point -> Double
 pX (Point v) = vX v
@@ -16,7 +19,7 @@ pY (Point v) = vY v
 pZ :: Point -> Double
 pZ (Point v) = vZ v
 
-data GenericTriangle t = Triangle t t t deriving (Show, Functor)
+data GenericTriangle t = Triangle t t t deriving (Show, Functor, Eq, Ord)
 type Triangle = GenericTriangle Point
 
 data GenericRay t = Ray { rayOrigin :: Point, rayDirection :: Vector } deriving (Show)
@@ -30,13 +33,31 @@ pNormal (Plane (Ray{rayOrigin = _, rayDirection = d})) = d
 pPointOn :: Plane -> Point
 pPointOn (Plane (Ray{rayOrigin = p, rayDirection = _})) = p
 
-newtype World = World [Triangle]
+data World = World { triangles :: [Triangle], wLookup :: Octree Triangle } deriving (Show)
+
+toV3 p = Vector3 (pX p) (pY p) (pZ p)
+
+makeWorld triangles = World { triangles = triangles, wLookup = fromList points }
+  where points = concat [makePoints t | t <- triangles]
+        makePoints t = [(i,t),(j,t),(k,t)]
+          where Triangle i j k = fmap toV3 t
 
 data Segment  = Segment Point Point deriving (Show)
 
 newtype Radians = Radians Double
 
 data ProjectionScreen = ProjectionScreen { xResolution :: Int, yResolution :: Int, screenDirection :: Ray, toLeftEdge :: Vector, toTopEdge :: Vector }
+
+uniq = S.toList . S.fromList
+
+hitCandidates ray world = uniq $ concat $ fmap forPoint $ pointsAlong ray
+  where pointsAlong ray = fmap forDistance distances
+        distanceIncrement = 1
+        distances = [0,distanceIncrement..30]
+        forDistance d = translateP (rayOrigin ray) (scaleV unitDirection d)
+        unitDirection = normalize $ rayDirection ray
+        forPoint p = fmap snd $ withinRange (wLookup world) 1 $ toV3 p
+        
 
 makePoint :: Double -> Double -> Double -> Point
 makePoint x y z = Point $ Vector x y z
@@ -165,7 +186,7 @@ rays screen = [rayRow yScale | yScale <- scales (yResolution screen)]
         screenCenter = pointToVec $ translateP (rayOrigin (screenDirection screen)) (rayDirection (screenDirection screen))
 
 render :: World -> Ray -> Char
-render (World triangles) r = if any (hitsTriangle r) triangles
+render world r = if any (hitsTriangle r) $ hitCandidates r world--(triangles world)
                     then '*'
                     else ' '
                  where hitsTriangle ray t = isJust (rayTriangleIntersection ray t)

@@ -7,27 +7,31 @@ import System.Console.ANSI
 
 main :: IO ()
 main = let screen = ProjectionScreen {
-             xResolution = 40,
-             yResolution = 40,
+             xResolution = 4,
+             yResolution = 4,
              screenDirection = Ray { rayOrigin=origin, rayDirection=unitY},
-             toLeftEdge = scaleV unitX (-0.5),
+             toLeftEdge = scaleV unitX (-1),
              toTopEdge = unitZ
            }
-           seedWorld = World $ sphere
+           seedWorld = makeWorld $ sphere
+           --seedWorld = makeWorld [farTriangle]
            farTriangle = Triangle (makePoint (-20) 30 0.5) (makePoint (-10) 30 10) (makePoint 0 30 0.5)
            sphere = makeSphere (makePoint 0 20 0) 5.0
            --worlds = map (renderWorld screen) $ iterate updateWorld seedWorld
            worlds = map (renderWorld screen) $ iterate rotateAroundOrigin seedWorld
         in
-          forM_ worlds (\w -> clearScreen >> (forM_ w putStrLn) >> threadDelay 100000)
+          (print $ hitCandidates (Ray origin unitY) seedWorld) >>
+          (print $ head $ renderWorld screen seedWorld) >>
+          (print $ renderWorld screen seedWorld)
+          --(forM_ worlds (\w -> clearScreen >> (forM_ w putStrLn) >> threadDelay 100000))
 
 
 rotateAroundOrigin :: World -> World
-rotateAroundOrigin (World triangles) = World $ fmap (fmap movePoint) triangles
+rotateAroundOrigin world = makeWorld $ fmap (fmap movePoint) (triangles world)
   where movePoint p = rotateAround p (Ray origin unitZ) (Radians 0.1)
 
 updateWorld :: World -> World
-updateWorld (World triangles) = World $ fmap go triangles
+updateWorld world = makeWorld $ fmap go (triangles world)
   where go :: Triangle -> Triangle
         go t = fmap (pushBack . (rotateAroundCorner t)) t
         pushBack p = translateP p (Vector 0 0.1 0)
